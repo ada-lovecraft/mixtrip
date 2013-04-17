@@ -11,7 +11,8 @@ var express = require('express')
   , Rdio = require("./rdio")
   , cred = require("./rdio_consumer_credentials")
   , EventEmitter = require('events').EventEmitter
-  , io = require('socket.io');
+  , io = require('socket.io')
+  , clc = require('cli-color');
 
 
 var rdio = new Rdio(["8cqh2xzc5m32u8awqahbkt2p", "7nXS37CH2Y"]);
@@ -20,7 +21,13 @@ var app = express()
     , server = http.createServer(app)
     , io = io.listen(server);
 
-var url   = require("url").parse(process.env.OPENREDIS_URL);
+
+var url = null;
+if (process.env.OPENREDIS_URL)
+    url   = require("url").parse(process.env.OPENREDIS_URL);
+else 
+    url = require("url").parse('http://localhost:6379');
+
 var redis = require("redis").createClient(url.port, url.hostname);
 
 if (url.auth) 
@@ -77,27 +84,11 @@ app.get("/dev", function(req,res) {
     res.render('mixtrip', { title: 'mixtrip'});
 });
 
-app.get("/dbdump", function(req,res) {
-    redis.createReadStream()
-  .on('data', function (data) {
-    console.log(data.key, '=', data.value)
-  })
-  .on('error', function (err) {
-    console.log('Oh my!', err)
-  })
-  .on('close', function () {
-    console.log('Stream closed')
-  })
-  .on('end', function () {
-    console.log('Stream closed')
-  })
-});
 
 app.get("/", function (req, res) {
   console.log('wat');
   console.log('session: ' + JSON.stringify(req.session));
     var session = req.session;
-    console.log('session: ' + JSON.stringify(session));
     if (session.hasOwnProperty('at')  && session.hasOwnProperty('ats')) {
         var accessToken = session.at;
         var accessTokenSecret = session.ats;
@@ -107,8 +98,6 @@ app.get("/", function (req, res) {
                                 [accessToken, accessTokenSecret]);
 
             res.render('mixtrip', { title: 'mixtrip'});
-            console.log(' logged in. in the mix');
-
 
             /*
             rdio.call("currentUser", function (err, data) {
@@ -146,7 +135,7 @@ app.get("/", function (req, res) {
             });
              */
         } else {
-            console.log('oooooops');
+            console.log(clc.redBright('Failed to use sessions'));
         }
     } else {
         console.log('93');
@@ -243,55 +232,37 @@ function clientDisconnect(socket) {
     socket.broadcast.emit('clientDisconnected', { clientCount: activeClients });
 }
 
-function getRdioKeys(socket,data) {
-    var currentTrack = -1;
-    var spotifyKeys = new Array();
+function getRdioInfo(socket,data) {
+    var track = data;
+    var spotify = track.spotify;
+    var artists = spotify.track.artists;
+    var trackID = data.id;
+    console.log("artists");
+    console.log(artists);
 
-    for(spotifyKey in data) {
-        spotifyKeys.push(spotifyKey);
-    }
-    console.log(JSON.stringify(spotifyKeys));
-    var getNextRdioKey = function() {
-        if (currentTrack++ < data.length -1) {
-            redis.get(data[currentTrack], function(err,value) {
-                if (!err && value != null) {
-                    var track = JSON.parse(value);
-                    console.log("info from DB");
-                    console.log(track);
-
-                    var spotify = track.spotify;
-                    var artists = spotify.track.artists;
-                    var trackID = data[currentTrack];
-                    console.log("artists");
-                    console.log(artists);
-
-                    console.log('SEARCHING RDIO FOR: ' + spotify.track.artists[0].name + " " + spotify.track.name + " :: " + trackID);
-                    rdio.call("search", {query: artists[0].name + " " + spotify.name, types: "Track", count: 1} , function(err,rdioData) {
-                        if (err) {
-                            console.log('error searching: ' + err);
-                        } else {
-                            if (rdioData.status == "ok") {
-                                //socket.emit('rdioKeyAcquired',{spotifyKey: trackID, rdioData: rdioData.result.results[0]});
-                                track.rdio = rdioData.result.results[0];
-                                redis.set(trackID, JSON.stringify(track), function(err) {
-                                    if (err) {
-                                        console.log("error re-inserting: " + err);
-                                    } else {
-                                        console.log("INSERTED " + trackID + " :: " + spotify.track.name);
-                                    }
-                                });
-                            }
-                        }
-                    });
-                } else {
-                    console.log("error getting data: " + data[currentTrack]);
-                }
-            });
-        } else 
-            clearInterval(rdioTimer);
-    };
-    
-    var rdioTimer = setInterval(getNextRdioKey,500);
+    rdio.call("getTracksByISRC", {isrc: spotify.track['external-ids'][0]['id']} , function(err,rdioData) {
+        if (err) {
+            console.log(clc.redBright('error searching: ' + err));
+            socket.emit('rdioSearchError', {id: trackID});
+            redis.del(trackID);
+        } else {
+            if (rdioData.status == "ok") {
+                console.log(clc.green('Match Found: ') + spotify.track.name);
+                //socket.emit('rdioKeyAcquired',{spotifyKey: trackID, rdioData: rdioData.result.results[0]});
+                track.rdio = rdioData.result[0];
+                redis.set(trackID, JSON.stringify(track), function(err) {
+                    if (err) {
+                        console.log(clc.redBright("error re-inserting: " + err));
+                    } else {
+                        socket.emit('rdioInfoReceived', track);
+                    }
+                });
+            } else {
+                console.log(clc.redBright("NO MATCH FOUND"));
+                socket.emit("noMatchFound",{id: trackID});
+            }
+        }
+    });
 }
 
 
@@ -304,7 +275,6 @@ function getTrackListInfo(socket,data) {
     var getNextTrackInfo = function() {
         if (currentTrack++ < keysToGet.length - 1) {
             var track = keysToGet[currentTrack];
-            console.log("SPOTIFY GETTING: " + track);
             var url='http://ws.spotify.com/lookup/1/.json?uri=spotify:track:' + track;
 
             var req = http.get(url, function(res) {
@@ -313,33 +283,36 @@ function getTrackListInfo(socket,data) {
                     data += chunk;
                 });
                 res.on('end', function() {
-                    var trackInfo = {
-                        spotify: JSON.parse(data)
-                        , rdio: {}
-                    };
-                    console.log(data);
-                    redis.set(track,JSON.stringify(trackInfo));    
+                    try { 
+                        var trackInfo = {
+                            id: track
+                            , spotify: JSON.parse(data)
+                            , rdio: {}
+                        };
+                        socket.emit('spotifyInfoReceived', trackInfo);
+                        getRdioInfo(socket,trackInfo);    
+                    } catch (e) {
+                        console.log(clc.redBright("error parsing json: " + e));
+                        console.log("JSON: " + data);
+                    }
                 });
             });
 
             req.on('error', function(e) {
-                console.log('problem with request: ' + e.message);
+                console.log(clc.redBright('problem with request: ' + e.message));
             });
         } else {
             clearInterval(trackTimer);
-            getRdioKeys(socket,keysToGet);
         }
     };
 
     data.forEach(function(spotifyKey, index, array) {
-        console.log(spotifyKey);
         redis.get(spotifyKey, function(err,value) {
             if (!err) {
-                if (value != "null") {
+                if (value == null) {
                     keysToGet.push(spotifyKey);
-                    console.log("mixtripdb does not contain " + spotifyKey);
+                    console.log(value);
                 } else {
-                    console.log('FOUND: ' + spotifyKey);
                     console.log(value);
                     socket.emit('allDataAcquired',JSON.parse(value));
                 }
