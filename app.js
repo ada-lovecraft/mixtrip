@@ -12,7 +12,6 @@ var express = require('express')
   , cred = require("./rdio_consumer_credentials")
   , EventEmitter = require('events').EventEmitter;
 
-
 var rdio = new Rdio(["8cqh2xzc5m32u8awqahbkt2p", "7nXS37CH2Y"]);
 
 var app = express();
@@ -23,15 +22,7 @@ var redis = require("redis").createClient(url.port, url.hostname);
 if (url.auth) 
     redis.auth(url.auth.split(":")[1]);
 
-var server = require('http').createServer(app)
-  , io = require('socket.io').listen(server);
 
-io.configure(function () { 
-  io.set("transports", ["xhr-polling"]); 
-  io.set("polling duration", 10); 
-});
-
-server.listen(8000); 
 
 // all environments
 app.set('port', process.env.PORT || 3000);
@@ -67,6 +58,25 @@ levelup('db/rdio', function (err,db) {
         console.log(err);
     }
 });*/
+
+var io = null;
+app.listen = function() {
+    var server = http.createServer(this);
+    io = require('socket.io').listen(server);
+    io.configure(function () { 
+        io.set("transports", ["xhr-polling"]); 
+        io.set("polling duration", 10); 
+    });
+    return server.listen.apply(server,arguments);
+}
+
+app.listen(3000);
+
+
+
+
+
+
 
 app.get("/dev", function(req,res) {
     res.render('mixtrip', { title: 'mixtrip'});
@@ -352,6 +362,4 @@ function getTrackListInfo(socket,data) {
 }
 
 
-http.createServer(app).listen(app.get('port'), function(){
-  console.log('Express server listening on port ' + app.get('port'));
-});
+
