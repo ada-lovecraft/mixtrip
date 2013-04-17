@@ -2,7 +2,7 @@ var trackList = null;
 var trackTimer = null;
 var currentTrack = -1;
 var trackData = {};
-var socket = io.connect('http://localhost:8000');
+var socket = io.connect(window.location.hostname);
 
 var foundTrackTemplate = '<tr id="{{id}}" data-spotifyid="{{id}}" data-artist="{{artist}}" data-track="{{trackName}}"><td>{{id}}</td><td>{{artist}}</td><td>{{trackName}}</td></tr>';
 
