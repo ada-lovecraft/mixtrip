@@ -10,12 +10,15 @@ var express = require('express')
   , path = require('path')
   , Rdio = require("./rdio")
   , cred = require("./rdio_consumer_credentials")
-  , EventEmitter = require('events').EventEmitter;
+  , EventEmitter = require('events').EventEmitter
+  , io = require('socket.io');
 
 
 var rdio = new Rdio(["8cqh2xzc5m32u8awqahbkt2p", "7nXS37CH2Y"]);
 
-var app = express();
+var app = express()
+    , server = http.createServer(app)
+    , io = io.listen(server);
 
 var url   = require("url").parse(process.env.OPENREDIS_URL);
 var redis = require("redis").createClient(url.port, url.hostname);
@@ -23,35 +26,37 @@ var redis = require("redis").createClient(url.port, url.hostname);
 if (url.auth) 
     redis.auth(url.auth.split(":")[1]);
 
-var server = require('http').createServer(app)
-  , io = require('socket.io').listen(server);
+
 
 io.configure(function () { 
   io.set("transports", ["xhr-polling"]); 
   io.set("polling duration", 10); 
 });
 
-server.listen(8000); 
 
-// all environments
-app.set('port', process.env.PORT || 3000);
-app.set('views', __dirname + '/views');
-app.set('view engine', 'jade');
-app.use(express.favicon());
-app.use(express.logger('dev'));
-app.use(express.bodyParser());
-app.use(express.methodOverride());
-app.use(express.cookieParser('seeeecreeeeet'));
-app.use(express.session());
-app.use(app.router);
-app.use(express.static(path.join(__dirname, 'public')));
+app.configure(function() {
+    app.set('port', process.env.PORT || 3000);
+    app.set('views', __dirname + '/views');
+    app.set('view engine', 'jade');
+    app.use(express.favicon());
+    app.use(express.logger('dev'));
+    app.use(express.bodyParser());
+    app.use(express.methodOverride());
+    app.use(express.cookieParser('seeeecreeeeet'));
+    app.use(express.session({
+        secret: 'seeeecreeeeet'
+    }));
+    app.use(app.router);
+    app.use(express.static(path.join(__dirname, 'public')));
 
-// development only
-if ('development' == app.get('env')) {
-  app.use(express.errorHandler());
-}
+});
 
-var mixtripdb = rdioDB = null;
+app.configure( 'development', function() {
+    app.use(function(req,res,next) {
+        res.send(404, 'Sorry, page not found');
+    });
+});
+
 
 redis.on("error", function (err) {
     console.log("error event - " + redis.host + ":" + redis.port + " - " + err);
@@ -352,6 +357,6 @@ function getTrackListInfo(socket,data) {
 }
 
 
-http.createServer(app).listen(app.get('port'), function(){
-  console.log('Express server listening on port ' + app.get('port'));
+server.listen(app.get('port'), function(){
+  console.log('Server listening on port ' + app.get('port'));
 });
