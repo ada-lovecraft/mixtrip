@@ -8,7 +8,6 @@ var express = require('express')
   , user = require('./routes/user')
   , http = require('http')
   , path = require('path')
-  , levelup = require('levelup')
   , Rdio = require("./rdio")
   , cred = require("./rdio_consumer_credentials")
   , EventEmitter = require('events').EventEmitter;
@@ -18,7 +17,11 @@ var rdio = new Rdio(["8cqh2xzc5m32u8awqahbkt2p", "7nXS37CH2Y"]);
 
 var app = express();
 
-var radium = new EventEmitter();
+var url   = require("url").parse(process.env.OPENREDIS_URL);
+var redis = require("redis").createClient(url.port, url.hostname);
+
+if (url.auth) 
+    redis.auth(url.auth.split(":")[1]);
 
 var server = require('http').createServer(app)
   , io = require('socket.io').listen(server);
@@ -45,17 +48,9 @@ if ('development' == app.get('env')) {
 
 var mixtripdb = rdioDB = null;
 
-levelup('db/mixtrip', function (err,db) {
-    if (!err) {
-        mixtripdb = db;
-        mixtripdb.on('ready', function() {
-            console.log('mixtrip db is ready');
-        });
-    } else {
-        console.log(err);
-    }
+redis.on("error", function (err) {
+    console.log("error event - " + redis.host + ":" + redis.port + " - " + err);
 });
-
 /*
 levelup('db/rdio', function (err,db) {
     if (!err) {
@@ -70,11 +65,10 @@ levelup('db/rdio', function (err,db) {
 
 app.get("/dev", function(req,res) {
     res.render('mixtrip', { title: 'mixtrip'});
-
 });
 
 app.get("/dbdump", function(req,res) {
-    mixtripdb.createReadStream()
+    redis.createReadStream()
   .on('data', function (data) {
     console.log(data.key, '=', data.value)
   })
@@ -249,8 +243,8 @@ function getRdioKeys(socket,data) {
     console.log(JSON.stringify(spotifyKeys));
     var getNextRdioKey = function() {
         if (currentTrack++ < data.length -1) {
-            mixtripdb.get(data[currentTrack], function(err,value) {
-                if (!err) {
+            redis.get(data[currentTrack], function(err,value) {
+                if (!err && value != null) {
                     var track = JSON.parse(value);
                     console.log("info from DB");
                     console.log(track);
@@ -269,7 +263,7 @@ function getRdioKeys(socket,data) {
                             if (rdioData.status == "ok") {
                                 //socket.emit('rdioKeyAcquired',{spotifyKey: trackID, rdioData: rdioData.result.results[0]});
                                 track.rdio = rdioData.result.results[0];
-                                mixtripdb.put(trackID, JSON.stringify(track), function(err) {
+                                redis.set(trackID, JSON.stringify(track), function(err) {
                                     if (err) {
                                         console.log("error re-inserting: " + err);
                                     } else {
@@ -314,7 +308,7 @@ function getTrackListInfo(socket,data) {
                         , rdio: {}
                     };
                     console.log(data);
-                    mixtripdb.put(track,JSON.stringify(trackInfo));    
+                    redis.set(track,JSON.stringify(trackInfo));    
                 });
             });
 
@@ -328,15 +322,19 @@ function getTrackListInfo(socket,data) {
     };
 
     data.forEach(function(spotifyKey, index, array) {
-
-        mixtripdb.get(spotifyKey, function(err,value) {
-            if (err) {
-                keysToGet.push(spotifyKey);
-                console.log("mixtripdb does not contain " + spotifyKey);
-            }
-            else {
-                console.log('FOUND: ' + spotifyKey);
-                socket.emit('allDataAcquired',JSON.parse(value));
+        console.log(spotifyKey);
+        redis.get(spotifyKey, function(err,value) {
+            if (!err) {
+                if (value != "null") {
+                    keysToGet.push(spotifyKey);
+                    console.log("mixtripdb does not contain " + spotifyKey);
+                } else {
+                    console.log('FOUND: ' + spotifyKey);
+                    console.log(value);
+                    socket.emit('allDataAcquired',JSON.parse(value));
+                }
+            } else {
+                console.log('error: ' + err);
             }
 
             if (index == array.length -1)
