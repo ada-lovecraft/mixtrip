@@ -2,14 +2,37 @@ extends layout
 
 block content
 	h1= title
-	textarea#playlist
-	button#submit Create Playlist
-	table#foundTracks Spotify Tracks
-		thead
-			th Spotify
-			th Rdio
-		tbody
-
-	div#missedTracks 
-		h3 Missed Tracks
+	form#playlistNameForm
+		input#playlistName.span10(type="text", placeholder="First: Name Your Playlist")
 		div
+			button#submitName.btn.btn-primary(type="submit", disabled='disabled') Ok... Now What? 
+				i.icon-arrow-right.icon-white
+	div#mixtrip.hide
+		div#playlistTarget.span10.hero-unit
+			h1 Drag your play list here.
+			p Just highlight everything in Spotify and drag it on here.
+	div.row
+		div.hide.span4#sidebar
+			div.span4.well#mixtripAffix
+				h3 Everything Look Good?
+				p Scroll on down. Make sure all the songs are correct.
+				p Hell, play 'em if you want to. I don't care what you do.
+				p When you're ready to convert your playlist to Rdio's service, just click the button below
+				form
+					p
+						button#hideSuccess.btn.btn-warning Show Only Errors
+					p
+						button#showSuccess.btn.btn-success.hide Show All
+					p
+						button#createPlaylist.btn.btn-primary Look's good. Let's do this.
+		div.span8.offset1.hide#playlistDisplay
+			div
+				table.table.playlist#foundTracks
+					thead
+						th Song
+						th Artist
+						th Actions
+					tbody
+		
+
+

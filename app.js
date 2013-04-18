@@ -38,6 +38,7 @@ if (url.auth)
 io.configure(function () { 
   io.set("transports", ["xhr-polling"]); 
   io.set("polling duration", 10); 
+  io.set('log level', 1);
 });
 
 
@@ -86,8 +87,6 @@ app.get("/dev", function(req,res) {
 
 
 app.get("/", function (req, res) {
-  console.log('wat');
-  console.log('session: ' + JSON.stringify(req.session));
     var session = req.session;
     if (session.hasOwnProperty('at')  && session.hasOwnProperty('ats')) {
         var accessToken = session.at;
@@ -98,47 +97,10 @@ app.get("/", function (req, res) {
                                 [accessToken, accessTokenSecret]);
 
             res.render('mixtrip', { title: 'mixtrip'});
-
-            /*
-            rdio.call("currentUser", function (err, data) {
-                if (err ) {
-                    console.log('currentUser: ' + err);
-                    return;
-                }
-
-                var currentUser = data.result;
-
-                rdio.call("getPlaylists", function (err, data) {
-                    if (err ) {
-                        console.log('getPlaylists: ' + err);
-                        return;
-                    }
-
-                    var playlists = data.result.owned;
-
-                    var body = [];
-
-                    body.push("<html><head><title>Rdio-Simple Example</title></head><body>");
-                    body.push("<p>" + currentUser.firstName + "'s playlists:</p>");
-                    body.push("<ul>");
-
-                    playlists.forEach(function (playlist) {
-                        body.push('<li><a href="' + playlist.shortUrl + '">' + playlist.name + '</a></li>');
-                    });
-
-                    body.push("</ul>");
-                    body.push('<a href="/logout">Log out of Rdio</a></body></html>');
-
-                    res.end(body.join("\n"));
-                });
-               
-            });
-             */
         } else {
             console.log(clc.redBright('Failed to use sessions'));
         }
     } else {
-        console.log('93');
         res.render('index', {title: 'mixtrip'});
     }
 });
@@ -152,7 +114,7 @@ app.get("/login", function (req, res) {
 
     rdio.beginAuthentication(callbackUrl, function (err, authUrl) {
         if (err) {
-            console.log(err);
+            console.log('Error Authenticating: ' + err);
             return;
         }
         console.log('authURL: ' + authUrl);
@@ -167,14 +129,10 @@ app.get("/login", function (req, res) {
 
 app.get("/callback", function (req, res) {
     
-    console.log('callback session: ' + JSON.stringify(req.session));
     var requestToken = req.session.rt;
     var requestTokenSecret = req.session.rts;
     var params = req.query;
     var verifier = params.oauth_verifier;
-    console.log('params: ' + JSON.stringify(params) );
-    console.log('requestToken: ' + requestToken);
-    console.log('requestTokenSecret: ' + requestTokenSecret);
 
 
     if (requestToken && requestTokenSecret && verifier) {
@@ -184,11 +142,9 @@ app.get("/callback", function (req, res) {
 
         rdio.completeAuthentication(verifier, function (err,data) {
             if (err) {
-              console.log(err);
+              console.log('Error Completing Authentication' + err);
                 return;
             }
-            console.log('complete authentication: ' + JSON.stringify(data));
-            console.log('rdio: ' + JSON.stringify(rdio));
 
             // Save the access token/secret in the session (and discard the
             // request token/secret).
@@ -196,7 +152,6 @@ app.get("/callback", function (req, res) {
             req.session.ats = rdio.token[1];
             req.session.rt = null;
             req.session.rts = null;
-            console.log('session after callback: ' + JSON.stringify(req.session));
             // Go to the home page.
             res.redirect("/");
         });
@@ -223,7 +178,6 @@ function clientConnect(socket) {
     activeClients++;
     socket.broadcast.emit('clientConnected', { clientCount: activeClients })
     socket.emit('clientConnected', { clientCount: activeClients });
-    console.log('activeClients: ' + activeClients)
 
 }
 
@@ -237,29 +191,65 @@ function getRdioInfo(socket,data) {
     var spotify = track.spotify;
     var artists = spotify.track.artists;
     var trackID = data.id;
-    console.log("artists");
-    console.log(artists);
 
     rdio.call("getTracksByISRC", {isrc: spotify.track['external-ids'][0]['id']} , function(err,rdioData) {
+        if (err) {
+            console.log(clc.redBright('error searching: ' + err));
+            socket.emit('rdioISRCError', {id: trackID});
+            redis.del(trackID);
+        } else {
+            if (rdioData.status == "ok") {
+                track.rdio = rdioData.result[0];
+                try {
+                    if (track.rdio != undefined) {
+                        redis.set(trackID, JSON.stringify(track), function(err) {
+                            if (err) {
+                                console.log(clc.redBright("error re-inserting: " + err));
+                            } else {
+                                socket.emit('rdioInfoReceived', track);
+                            }
+                        });
+                    } else {
+                        console.log(clc.redBright("NO MATCH FOUND: ") + artists[0].name + " : " + spotify.track.name );
+                         rdio.call("search", {query: artists[0].name + " " + spotify.track.name, types: "Track"} , function(err,rdioData) {
+                            if (err) {
+                                console.log(clc.redBright('error searching: ' + err));
+                                socket.emit('rdioSearchError', {id: trackID});
+                                redis.del(trackID);
+                            } else {
+                                if (rdioData.status == "ok") {
+                                    socket.emit('replacementSuggestionsReceived', {spotify: data, searchData: rdioData.result})
+                                }
+                            }
+                        });
+                    }
+                } catch(e) {
+                    console.log(clc.redBright(e));
+                    console.log(clc.blueBright(JSON.stringify(rdioData)));
+                }
+            } else {
+               console.log(clc.redBright("Rdio Query Failed"));
+               console.log(clc.bluebright(JSON.stringify(rdioData)));
+            }
+        }
+    });
+}
+
+
+function searchRdioForLocal(socket,data) {
+    console.log('searching for: ' + data);
+    var matches = data.split('___');
+    console.log(clc.blueBright('searching for: ' +  matches));
+    var artist = matches[0].replace(/\-/g, ' ');
+    var trackName = matches[2].replace(/\-/g, ' ');
+    rdio.call("search", {query: artist + " " + trackName, types: "Track"} , function(err,rdioData) {
         if (err) {
             console.log(clc.redBright('error searching: ' + err));
             socket.emit('rdioSearchError', {id: trackID});
             redis.del(trackID);
         } else {
             if (rdioData.status == "ok") {
-                console.log(clc.green('Match Found: ') + spotify.track.name);
-                //socket.emit('rdioKeyAcquired',{spotifyKey: trackID, rdioData: rdioData.result.results[0]});
-                track.rdio = rdioData.result[0];
-                redis.set(trackID, JSON.stringify(track), function(err) {
-                    if (err) {
-                        console.log(clc.redBright("error re-inserting: " + err));
-                    } else {
-                        socket.emit('rdioInfoReceived', track);
-                    }
-                });
-            } else {
-                console.log(clc.redBright("NO MATCH FOUND"));
-                socket.emit("noMatchFound",{id: trackID});
+                socket.emit('searchSuggestionsReceived', {id: data, searchData:rdioData.result})
             }
         }
     });
@@ -267,14 +257,16 @@ function getRdioInfo(socket,data) {
 
 
 function getTrackListInfo(socket,data) {
-
+    console.log(clc.greenBright(JSON.stringify(data)));
     var currentTrack = -1;
-    console.log('here');
     var keysToGet = new Array();
     var trackTimer = null;
+    var localFiles = new Array();
     var getNextTrackInfo = function() {
         if (currentTrack++ < keysToGet.length - 1) {
             var track = keysToGet[currentTrack];
+            console.log(track);
+       
             var url='http://ws.spotify.com/lookup/1/.json?uri=spotify:track:' + track;
 
             var req = http.get(url, function(res) {
@@ -292,8 +284,8 @@ function getTrackListInfo(socket,data) {
                         socket.emit('spotifyInfoReceived', trackInfo);
                         getRdioInfo(socket,trackInfo);    
                     } catch (e) {
-                        console.log(clc.redBright("error parsing json: " + e));
-                        console.log("JSON: " + data);
+                        console.log(clc.redBright("error parsing json:  " + url + " : "  + e));
+                        console.log(clc.blueBright("JSON: " + data));
                     }
                 });
             });
@@ -301,6 +293,7 @@ function getTrackListInfo(socket,data) {
             req.on('error', function(e) {
                 console.log(clc.redBright('problem with request: ' + e.message));
             });
+            
         } else {
             clearInterval(trackTimer);
         }
@@ -310,10 +303,13 @@ function getTrackListInfo(socket,data) {
         redis.get(spotifyKey, function(err,value) {
             if (!err) {
                 if (value == null) {
-                    keysToGet.push(spotifyKey);
-                    console.log(value);
+                    if (spotifyKey.toString().match(/-/)) {
+                        console.log('found local file: ' + spotifyKey);
+                        searchRdioForLocal(socket, spotifyKey);
+                    } else {
+                        keysToGet.push(spotifyKey);
+                    }
                 } else {
-                    console.log(value);
                     socket.emit('allDataAcquired',JSON.parse(value));
                 }
             } else {

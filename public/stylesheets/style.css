@@ -7,8 +7,21 @@ a {
   color: #00B7FF;
 }
 
-textarea#playlist {
-	width:600px;
-	height:300px;
-	display: block;
+
+
+div#playlistTarget {
+	border-radius: 100px;
+
+}
+
+.activeDrag {
+ 	background-color: #C4ABFE !important;
+}
+
+.dragComplete{
+	background-color: #9669FE;
+}
+
+.select {
+	margin-top: 5px;
 }
