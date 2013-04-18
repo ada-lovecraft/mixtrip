@@ -7,8 +7,8 @@ var socket = io.connect(window.location.hostname);
 
 var blankTrackTemplate = '<tr id="{{.}}"></tr>';
 var trackTemplate = '<td><i class="icon-music"><!-- --></i> {{rdio.name}}</td><td>{{rdio.artist}}</td><td><!-- --></td>';
-var searchTemplate = '<td><i class="icon-file"><!-- --></i> {{searchData.trackName}}</td><td>{{searchData.artist}}</td><td>Best Suggestions<br/><select data-style="btn-error" data-row="{{id}}">{{#searchData.results}}<option value="{{key}}">{{artist}} - {{name}}</option>{{/searchData.results}}</select></td>';
-var suggestionTemplate = '<td><i class="icon-warning-sign"><!-- --></i> {{trackName}}</td><td>{{artist}}</td><td>Best Suggestions<br/><select data-style="btn-warning" data-row="{{id}}">{{#searchData.results}}<option value="{{key}}">{{artist}} - {{name}}</option>{{/searchData.results}}</select></td>';
+var searchTemplate = '<td><i class="icon-file"><!-- --></i> {{searchData.trackName}}</td><td>{{searchData.artist}}</td><td>Best Suggestions<br/><select data-style="btn-warning" data-row="{{id}}">{{#searchData.results}}<option value="{{key}}">{{artist}} - {{name}}</option>{{/searchData.results}}</select></td>';
+var suggestionTemplate = '<td><i class="icon-warning-sign"><!-- --></i> {{trackName}}</td><td>{{artist}}</td><td>Best Suggestions<br/><select data-style="btn-danger" data-row="{{id}}">{{#searchData.results}}<option value="{{key}}">{{artist}} - {{name}}</option>{{/searchData.results}}</select></td>';
 
 $(document).ready(function() {
 
@@ -72,16 +72,20 @@ $(document).ready(function() {
 
 	$('#hideSuccess').click(function(e) {
 		e.preventDefault();
-		$('tr.success').slideUp();
-		$(this).slideUp();
-		$('#showSuccess').slideDown();
+		$('tr.success').fadeOut();
+		$(this).fadeOut(function() {
+			$('#showSuccess').fadeIn();	
+		});
+		
 	});
 
 	$('#showSuccess').click(function(e) {
 		e.preventDefault();
-		$('tr.success').slideDown();
-		$(this).slideUp();
-		$('#hideSuccess').slideDown();
+		$('tr.success').fadeIn();
+		$(this).fadeOut(function() {
+			$('#hideSuccess').fadeIn();	
+		});
+		
 	});
 
 	socket.on('clientConnected', function (data) {
