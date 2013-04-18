@@ -110,7 +110,7 @@ app.get("/login", function (req, res) {
 
     // Begin the authentication process.
     var rdio = new Rdio([cred.RDIO_CONSUMER_KEY, cred.RDIO_CONSUMER_SECRET]);
-    var callbackUrl =  "http:?/mixtrip.herokuapp.com/callback";
+    var callbackUrl =  "http://mixtrip.herokuapp.com/callback";
 
     rdio.beginAuthentication(callbackUrl, function (err, authUrl) {
         if (err) {
