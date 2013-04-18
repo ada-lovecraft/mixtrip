@@ -7,7 +7,7 @@ var socket = io.connect(window.location.hostname);
 
 var blankTrackTemplate = '<tr id="{{.}}"></tr>';
 var trackTemplate = '<td><i class="icon-music"><!-- --></i> {{rdio.name}}</td><td>{{rdio.artist}}</td><td><!-- --></td>';
-var searchTemplate = '<td><i class="icon-file"><!-- --></i> {{searchData.trackName}}</td><td>{{searchData.artist}}</td><td>Best Suggestions<br/><select data-style="btn-warning" data-row="{{id}}">{{#searchData.results}}<option value="{{key}}">{{artist}} - {{name}}</option>{{/searchData.results}}</select></td>';
+var searchTemplate = '<td><i class="icon-file"><!-- --></i> {{searchData.trackName}}</td><td>{{searchData.artist}}</td><td>Best Suggestions<br/><select data-style="btn-error" data-row="{{id}}">{{#searchData.results}}<option value="{{key}}">{{artist}} - {{name}}</option>{{/searchData.results}}</select></td>';
 var suggestionTemplate = '<td><i class="icon-warning-sign"><!-- --></i> {{trackName}}</td><td>{{artist}}</td><td>Best Suggestions<br/><select data-style="btn-warning" data-row="{{id}}">{{#searchData.results}}<option value="{{key}}">{{artist}} - {{name}}</option>{{/searchData.results}}</select></td>';
 
 $(document).ready(function() {
@@ -167,7 +167,7 @@ $(document).ready(function() {
 		data.artist = data.spotify.spotify.track.artists[0].name;
 		data.trackName = data.spotify.spotify.track.name;
 		$(row).html(Mustache.to_html(suggestionTemplate,data));
-		$(row).addClass('warning');
+		$(row).addClass('error');
 		$(row).data('rdioKey',data.searchData.results[0].key);
 		$(row).find('select').selectpicker();
 		$(row).find('select').change(function(evt) {
