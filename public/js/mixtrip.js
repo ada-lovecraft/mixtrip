@@ -72,7 +72,7 @@ $(document).ready(function() {
 
 	$('#hideSuccess').click(function(e) {
 		e.preventDefault();
-		$('tr.success').fadeOut();
+		$('tr.success').hide();
 		$(this).fadeOut(function() {
 			$('#showSuccess').fadeIn();	
 		});
@@ -81,7 +81,7 @@ $(document).ready(function() {
 
 	$('#showSuccess').click(function(e) {
 		e.preventDefault();
-		$('tr.success').fadeIn();
+		$('tr.success').show();
 		$(this).fadeOut(function() {
 			$('#hideSuccess').fadeIn();	
 		});
@@ -109,10 +109,9 @@ $(document).ready(function() {
 	});
 
 	socket.on('rdioInfoReceived', function(data) {
-		console.log(data.id);
 		try { 
 			var row = $('tr#'+data.id);
-			$(row).html(Mustache.to_html(trackTemplate,data.rdio));
+			$(row).html(Mustache.to_html(trackTemplate,data));
 			$(row).addClass('success');
 			$(row).data('rdioKey',data.rdio.key);
 

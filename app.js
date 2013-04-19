@@ -194,7 +194,7 @@ function getRdioInfo(socket,data) {
 
     rdio.call("getTracksByISRC", {isrc: spotify.track['external-ids'][0]['id']} , function(err,rdioData) {
         if (err) {
-            console.log(clc.redBright('error searching: ' + err));
+            console.log(clc.redBright('error retreiving ISRC: ' + err));
             socket.emit('rdioISRCError', {id: trackID});
             redis.del(trackID);
         } else {
@@ -210,11 +210,13 @@ function getRdioInfo(socket,data) {
                             }
                         });
                     } else {
-                        console.log(clc.redBright("NO MATCH FOUND: ") + artists[0].name + " : " + spotify.track.name );
-                         rdio.call("search", {query: artists[0].name + " " + spotify.track.name, types: "Track"} , function(err,rdioData) {
+                        var artist = artists[0].name.replace(/[,\!]/g, "");
+                        var name = spotify.track.name.replace(/[,\!]/g, "");
+                        console.log(clc.redBright("NO MATCH FOUND: Searching ") + artist + " : " + name );
+                         rdio.call("search", {query: artist + " " + name, types: "Track"} , function(err,rdioData) {
                             if (err) {
                                 console.log(clc.redBright('error searching: ' + err));
-                                socket.emit('rdioSearchError', {id: trackID});
+                                socket.emit('rdioSearchError', {id: trackID, error: err});
                                 redis.del(trackID);
                             } else {
                                 if (rdioData.status == "ok") {
