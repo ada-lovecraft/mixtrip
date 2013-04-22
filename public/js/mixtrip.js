@@ -3,16 +3,17 @@ var trackTimer = null;
 var currentTrack = -1;
 var trackData = {};
 var socket = io.connect(window.location.hostname);
+var trackResponseCounter = 0;
 
-
-var blankTrackTemplate = '<tr id="{{.}}"></tr>';
-var trackTemplate = '<td><i class="icon-music"><!-- --></i> {{rdio.name}}</td><td>{{rdio.artist}}</td><td><!-- --></td>';
-var searchTemplate = '<td><i class="icon-file"><!-- --></i> {{searchData.trackName}}</td><td>{{searchData.artist}}</td><td>Best Suggestions<br/><select data-style="btn-warning" data-row="{{id}}">{{#searchData.results}}<option value="{{key}}">{{artist}} - {{name}}</option>{{/searchData.results}}</select></td>';
-var suggestionTemplate = '<td><i class="icon-warning-sign"><!-- --></i> {{trackName}}</td><td>{{artist}}</td><td>Best Suggestions<br/><select data-style="btn-danger" data-row="{{id}}">{{#searchData.results}}<option value="{{key}}">{{artist}} - {{name}}</option>{{/searchData.results}}</select></td>';
 
 $(document).ready(function() {
 
 	var $window = $(window)
+	var blankTrackTemplate = $('#placeholderTpl').html();
+	var successTemplate = $('#successTpl').html();
+	var searchTemplate = $('#searchTpl').html();
+	var suggestionTemplate = $('#suggestionTpl').html();
+
 
 	$("#playlistTarget")
 	    .bind("dragover", false)
@@ -36,13 +37,14 @@ $(document).ready(function() {
 					// \/local\/
 					if (track.match(/\/local\//)) {
 						console.log(track);
-						var newTrackName = track.replace('http://open.spotify.com/local/','').replace(/\//g,'___').replace(/\+/g,'-');
+						var newTrackName = track.replace('http://open.spotify.com/local/','').replace(/\//g,'___').replace(/[\+%]/g,'-');
 						trackList.push(newTrackName);
 					} else {
 						trackList.push(track.match(/\w+$/));
 					}
 				});
 				trackList.forEach(function(track) {
+					console.log(track);
 					$('#foundTracks tbody').append(Mustache.to_html(blankTrackTemplate,track))
 				});
 				socket.emit('getTrackListInfo',trackList);
@@ -70,22 +72,11 @@ $(document).ready(function() {
 		});
 	});
 
-	$('#hideSuccess').click(function(e) {
-		e.preventDefault();
-		$('tr.success').hide();
-		$(this).fadeOut(function() {
-			$('#showSuccess').fadeIn();	
-		});
-		
-	});
+	
 
-	$('#showSuccess').click(function(e) {
+	$('#toggleErrors').click(function(e) {
 		e.preventDefault();
-		$('tr.success').show();
-		$(this).fadeOut(function() {
-			$('#hideSuccess').fadeIn();	
-		});
-		
+		$('tr.success').toggleClass('hide');
 	});
 
 	socket.on('clientConnected', function (data) {
@@ -94,6 +85,7 @@ $(document).ready(function() {
 
 	socket.on('rdioSearchError', function(data) {
 		console.log('rdioSearchError: %o', data);
+		setProgress();
 	});
 
 
@@ -111,7 +103,7 @@ $(document).ready(function() {
 	socket.on('rdioInfoReceived', function(data) {
 		try { 
 			var row = $('tr#'+data.id);
-			$(row).html(Mustache.to_html(trackTemplate,data));
+			$(row).html(Mustache.to_html(successTemplate,data));
 			$(row).addClass('success');
 			$(row).data('rdioKey',data.rdio.key);
 
@@ -119,19 +111,22 @@ $(document).ready(function() {
 			console.error(e);
 			console.log(data);
 		}
+		setProgress();
 	});
 
 	
 	socket.on('allDataAcquired', function(data) {
 		var row = $('tr#'+data.id);
 		try { 
-			$(row).html(Mustache.to_html(trackTemplate,data));
+			var template = $('#successTpl').html();
+			$(row).html(Mustache.to_html(template,data));
 			$(row).addClass('success');
 			$(row).data('rdioKey',data.rdio.key);
 		} catch(e) {
 			console.error(e);
 			console.log(data);
 		}
+		setProgress();
 	});
 
 	socket.on('noMatchFound', function(data) { 
@@ -142,7 +137,7 @@ $(document).ready(function() {
 		}
 		$('tr#' + data.id).html(Mustache.to_html(trackTemplate,trackInfo));
 		$('tr#' + data.id).addClass('error');
-
+		setProgress();
 
 	});
 
@@ -161,6 +156,7 @@ $(document).ready(function() {
 			var row = $('tr#'+$(this).data('row'));
 			$(row).data('rdioKey',$(this).find(':selected').val());
 		});
+		setProgress();
 	});
 
 	socket.on('replacementSuggestionsReceived', function(data) { 
@@ -177,8 +173,41 @@ $(document).ready(function() {
 			var row = $('tr#'+$(this).data('row'));
 			$(row).data('rdioKey',$(this).find(':selected').val());
 		});
+		setProgress();
 	});
 
+	$(document).on('click','.disableRow',function(e) {
+		e.preventDefault();
+		console.log($(this).closest('tr'));
+		$(this).closest('tr').toggleClass('disabled');
+	});
+
+
+	$('#createPlaylist').click(function (e) {
+		var rdioList = new Array();
+		var trackList = $('#foundTracks tbody tr:not(.disabled)');
+		console.log(trackList);
+		for(var i = 0; i< trackList.length; i++) {
+			var track = trackList[i];
+			console.log(track);
+			rdioList.push($(track).data('rdioKey'));
+		}
+		console.log(rdioList);
+	});
+
+	function setProgress() {
+		trackResponseCounter++
+		if( trackResponseCounter == trackList.length) {
+			$('#createPlaylist').button('complete');
+			$('.progress').removeClass('active');
+			$('.progress .bar').attr('style','width:100%');
+		} else {
+			console.log(trackResponseCounter , trackList.length);
+			var percent = (trackResponseCounter/trackList.length) * 100;
+			$('.progress .bar').attr('style','width:' + percent + '%');
+		}
+		
+	}
 
 	$('#mixtripAffix').affix();
 });

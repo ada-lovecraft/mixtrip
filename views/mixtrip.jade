@@ -15,23 +15,67 @@ block content
 		div.hide.span4#sidebar
 			div.span4.well#mixtripAffix
 				h3 Everything Look Good?
+				p#progressStatus
+					div.progress.progress-success.progress-striped.active
+						div.bar
 				p
-						button#hideSuccess.btn.btn-inverse Show Only Errors & Warnings
-				p
-						button#showSuccess.btn.btn-success.hide Show All
+					button#toggleErrors.btn.btn-danger(data-toggle="button") Show Only Errors & Warnings
 				p Scroll on down. Make sure all the songs are correct.
 				p Hell, play 'em if you want to. I don't care what you do.
 				p When you're ready to convert your playlist to Rdio's service, just click the button below
 					p
-						button#createPlaylist.btn.btn-primary.btn-large Look's good. Let's do this.
-		div.span8.offset1.hide#playlistDisplay
+						button#createPlaylist.btn.btn-primary.btn-large(data-loading-text="Loading...", data-complete-text="Create My Playlist") Loading...
+		div.span10.offset1.hide#playlistDisplay
 			div
 				table.table.playlist#foundTracks
 					thead
-						th Song
-						th Artist
-						th Actions
+						tr
+							th Song
+							th Artist
+							th Actions
 					tbody
-		
 
+	script(type="text/template", id="placeholderTpl")
+		tr(id="{{.}}")
 
+	script(type="text/template", id="successTpl")
+		td
+			i.icon-music
+			|{{rdio.name}}
+		td
+			|{{rdio.artist}}
+		td
+			a.disableRow(href="#")
+				i.icon-remove-sign
+
+	script(type="text/template", id="searchTpl")
+		td
+			i.icon-file
+			|{{searchData.trackName}}
+		td
+			|{{searchData.artist}}
+		td
+			select(data-style="btn-warning", data-row="{{id}}")
+				|{{#searchData.results}}
+				option(value="{{key}}")
+					|{{artist}} - {{name}}
+				|{{/searchData.results}} 
+			a.disableRow(href="#")
+				i.icon-remove-sign
+	
+	script(type="text/template", id="suggestionTpl")
+		td
+			i.warning-sign
+			|{{trackName}}
+		td
+			|{{artist}}
+		td
+			select(data-style="btn-danger", data-row="{{spotify.id}}")
+				option(value="false") Select a Replacement
+				|{{#searchData.results}}
+				|<option value="{{key}}">
+				|{{artist}} - {{name}}
+				|</option>
+				|{{/searchData.results}} 
+			a.disableRow(href="#")
+				i.icon-remove-sign

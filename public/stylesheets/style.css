@@ -25,3 +25,8 @@ div#playlistTarget {
 .select {
 	margin-top: 5px;
 }
+
+tr.disabled td{
+	background-color: #a9a9a9 !important;
+	color: #5c5c5c !important;
+}
