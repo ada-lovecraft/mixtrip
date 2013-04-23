@@ -107,8 +107,8 @@ app.get("/login", function (req, res) {
 
     // Begin the authentication process.
     var rdio = new Rdio([cred.RDIO_CONSUMER_KEY, cred.RDIO_CONSUMER_SECRET]);
-    var callbackUrl =  "http://mixtrip.herokuapp.com/callback";
-
+    var callbackUrl =  process.env.RDIO_CALLBACK_URL;
+    console.log(callbackUrl);
     rdio.beginAuthentication(callbackUrl, function (err, authUrl) {
         if (err) {
             console.log('Error Authenticating: ' + err);
@@ -265,12 +265,12 @@ app.io.route('createPlaylist', function(req) {
     var rdio = getSessionRdio(req);
     console.log('tracks: ' + req.data.tracklist.join())
     console.log('creating playlist: ' + req.data.name);
-    rdio.call("createPlaylist", {name: req.data.name, description: "Created by mixtrip", tracks: req.data.tracklist.join() } , function(err,rdioData) {
+    var playlistName = req.data.name.replace(/[^a-zA-Z0-9_\- ]/g,'');
+    rdio.call("createPlaylist", {name: playlistName, description: "Created by mixtrip", tracks: req.data.tracklist.join() } , function(err,rdioData) {
         console.log('playlist response');
         if (err) {
             console.log(clc.redBright('error creating playlist: ' + err));
             req.io.emit('rdioCreateError', { error: err});
-            redis.del(trackID);
         } else {
             if (rdioData.status == "ok") {
                 console.log('emitting success');
@@ -370,6 +370,8 @@ function getSessionRdio(req) {
     console.log('rdio is a bust');
     return null;
 }
+
+
 
 app.listen(app.get('port'), function(){
   console.log('Server listening on port ' + app.get('port'));
