@@ -12,7 +12,8 @@ var express = require('express.io')
   , cred = require("./rdio_consumer_credentials")
   , EventEmitter = require('events').EventEmitter
   , io = require('socket.io')
-  , clc = require('cli-color');
+  , clc = require('cli-color')
+  , yql = require('yql');
 
 
 
@@ -171,8 +172,28 @@ app.io.route('disconnect', function(req) {
     app.io.broadcast('clientDisconnected', { clientCount: activeClients });
 });
 
+app.io.route('getPlaylistInfo', function(req) {
+    var playlistURL = req.data;
+    new yql.exec('select * from data.html.cssselect where url="' + playlistURL + '" and css="div.two-thirds"', function(response) {
+            var header = response.query.results.results.div[0].div[0];
+            var playlistName = header.h1;
+            var player = response.query.results.results.div[0].div[1].ul.li;
+            var trackList = new Array();
+            console.log(player);
+            player.forEach(function(track) {
+                trackList.push(track.a[1].href.replace(/\/track\//,''));
+            });
+            req.io.emit('playlistRetrieved', { trackList: trackList, playlistName: playlistName});
+            req.data = trackList;
+            getTrackListInfo(req);
+    });
+
+});
 
 app.io.route('getTrackListInfo', function(req) { 
+    getTrackListInfo(req);
+});
+function getTrackListInfo(req) {
     var currentTrack = -1;
     var keysToGet = new Array();
     var trackTimer = null;
@@ -238,7 +259,7 @@ app.io.route('getTrackListInfo', function(req) {
             }
         });
     });
-});
+}
 
 app.io.route('createPlaylist', function(req) {     
     var rdio = getSessionRdio(req);

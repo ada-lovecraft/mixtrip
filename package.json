@@ -11,6 +11,7 @@
     "redis": "*",
     "socket.io":"*",
     "cli-color":"*",
-    "express.io":"*"
+    "express.io":"*",
+    "yql":"*"
   }
 }

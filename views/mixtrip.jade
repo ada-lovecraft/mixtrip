@@ -1,13 +1,9 @@
 extends layout
 
 block content
-	h1= title
-	form#playlistNameForm
-		input#playlistName.span10(type="text", placeholder="First: Name Your Playlist")
-		div
-			button#submitName.btn.btn-primary(type="submit", disabled='disabled') Ok... Now What? 
-				i.icon-arrow-right.icon-white
-	div#mixtrip.hide
+	h1
+		a(href='/')= title
+	div#mixtrip
 		div#playlistTarget.span10.hero-unit
 			h1 Drag your play list here.
 			p Just highlight everything in Spotify and drag it on here.
@@ -15,6 +11,8 @@ block content
 		div.hide.span4#sidebar
 			div.span4.well#mixtripAffix
 				h3 Everything Look Good?
+				p
+					input#playlistName(type="text", placeholder="Playlist Name")
 				p#progressStatus
 					div.progress.progress-success.progress-striped.active
 						div.bar
