@@ -30,3 +30,7 @@ tr.disabled td{
 	background-color: #a9a9a9 !important;
 	color: #5c5c5c !important;
 }
+
+#mixtripAffix button {
+	width: 100%;
+}

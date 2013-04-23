@@ -24,7 +24,10 @@ block content
 				p Hell, play 'em if you want to. I don't care what you do.
 				p When you're ready to convert your playlist to Rdio's service, just click the button below
 					p
-						button#createPlaylist.btn.btn-primary.btn-large(data-loading-text="Loading...", data-complete-text="Create My Playlist") Loading...
+						button#createPlaylist.btn.btn-primary.disabled.btn-large(disabled="disabled",data-loading-text="Loading...", data-complete-text="Create My Playlist") Loading...
+					p
+						button#toggleTwitter.btn.btn-info(data-toggle="button") <i class="icon-retweet icon-white"><!-- --></i> Allow mixtrip to tweet my playlist
+
 		div.span10.offset1.hide#playlistDisplay
 			div
 				table.table.playlist#foundTracks
@@ -34,6 +37,18 @@ block content
 							th Artist
 							th Actions
 					tbody
+	di.row
+		div.hide#creating
+			h3 Your playlist is being created
+			div.progress.progress-striped.active
+				div.bar(style="width:100%");
+		div.hide.span10#success
+			h3 Your playlist has been created
+			div#successNote
+		div.hide.span4#failure
+			h3 Something went wrong :(
+			p
+				button#tryagain.btn.btn-primary.btn-large Try Again		
 
 	script(type="text/template", id="placeholderTpl")
 		tr(id="{{.}}")
@@ -41,17 +56,24 @@ block content
 	script(type="text/template", id="successTpl")
 		td
 			i.icon-music
-			|{{rdio.name}}
+			| {{rdio.name}}
 		td
 			|{{rdio.artist}}
 		td
 			a.disableRow(href="#")
 				i.icon-remove-sign
 
+	script(type="text/template", id="errorTpl")
+		td
+			i.icon-fire
+			| {{.}}
+		td Error retreiving spotify info for this track 
+		td
+			
 	script(type="text/template", id="searchTpl")
 		td
 			i.icon-file
-			|{{searchData.trackName}}
+			| {{searchData.trackName}}
 		td
 			|{{searchData.artist}}
 		td
@@ -66,7 +88,7 @@ block content
 	script(type="text/template", id="suggestionTpl")
 		td
 			i.warning-sign
-			|{{trackName}}
+			| {{trackName}}
 		td
 			|{{artist}}
 		td
@@ -79,3 +101,8 @@ block content
 				|{{/searchData.results}} 
 			a.disableRow(href="#")
 				i.icon-remove-sign
+
+	script(type="text/template", id="createdTpl")
+		h4 View your new playlist on rdio: 
+			a(href="{{shortUrl}}",target="new") {{name}}
+		a.btn.btn-primary(href="https://twitter.com/intent/tweet?text={{encodedText}}",target="_new") Share your playlist on Twitter

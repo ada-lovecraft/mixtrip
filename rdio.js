@@ -64,6 +64,7 @@ Rdio.prototype.call = function call(method, params, callback) {
     }
 
     copy.method = method;
+    console.log('copy: ' + JSON.stringify(copy));
 
     this._signedPost("http://api.rdio.com/1/", copy, function (err, body) {
         if (err) {
@@ -78,7 +79,6 @@ Rdio.prototype._signedPost = function signedPost(urlString, params, callback) {
     var auth = om(this.consumer, urlString, params, this.token);
     var parsed = url.parse(urlString);
     var content = qs.stringify(params);
-
     var req = http.request({
         method: "POST",
         host: parsed.host,
@@ -90,6 +90,7 @@ Rdio.prototype._signedPost = function signedPost(urlString, params, callback) {
             "Content-Length": content.length.toString()
         }
     }, function (res) {
+
         var body = "";
 
         res.setEncoding("utf8");

@@ -4,7 +4,7 @@ var currentTrack = -1;
 var trackData = {};
 var socket = io.connect(window.location.hostname);
 var trackResponseCounter = 0;
-
+var playlistName = '';
 
 $(document).ready(function() {
 
@@ -13,7 +13,7 @@ $(document).ready(function() {
 	var successTemplate = $('#successTpl').html();
 	var searchTemplate = $('#searchTpl').html();
 	var suggestionTemplate = $('#suggestionTpl').html();
-
+	var createdTemplate = $('#createdTpl').html();
 
 	$("#playlistTarget")
 	    .bind("dragover", false)
@@ -37,7 +37,7 @@ $(document).ready(function() {
 					// \/local\/
 					if (track.match(/\/local\//)) {
 						console.log(track);
-						var newTrackName = track.replace('http://open.spotify.com/local/','').replace(/\//g,'___').replace(/[\+%]/g,'-');
+						var newTrackName = track.replace('http://open.spotify.com/local/','').replace(/\//g,'___').replace(/[\+%\.]/g,'-');
 						trackList.push(newTrackName);
 					} else {
 						trackList.push(track.match(/\w+$/));
@@ -67,6 +67,7 @@ $(document).ready(function() {
 
 	$('#submitName').click(function(evt) {
 		evt.preventDefault();
+		playlistName = $('#playlistName').val();
 		$('#playlistNameForm').fadeOut(function() {
 			$('#mixtrip').fadeIn();
 		});
@@ -86,18 +87,6 @@ $(document).ready(function() {
 	socket.on('rdioSearchError', function(data) {
 		console.log('rdioSearchError: %o', data);
 		setProgress();
-	});
-
-
-	socket.on('spotifyInfoReceived', function(data) {
-		/*
-		var spotify = {
-			artist: data.spotify.track.artists[0].name
-			, name: data.spotify.track.name
-		};
-		var container = $('tr#' + data.id + " td.spotifyInfo");
-		$(container).html(Mustache.to_html(spotifyTrackTemplate,spotify));
-		*/
 	});
 
 	socket.on('rdioInfoReceived', function(data) {
@@ -142,6 +131,7 @@ $(document).ready(function() {
 	});
 
 	socket.on('searchSuggestionsReceived', function(data) { 
+
 		console.log('searchSuggestionReceived: %o' , data);
 		var row = $('tr#'+data.id);
 		var splits = data.id.split('___');
@@ -152,6 +142,7 @@ $(document).ready(function() {
 		$(row).addClass('warning');
 		$(row).data('rdioKey',data.searchData.results[0].key);
 		$(row).find('select').selectpicker();
+
 		$(row).find('select').change(function(evt) {
 			var row = $('tr#'+$(this).data('row'));
 			$(row).data('rdioKey',$(this).find(':selected').val());
@@ -176,6 +167,36 @@ $(document).ready(function() {
 		setProgress();
 	});
 
+	socket.on('rdioCreateSuccess', function(data) {
+		var successData = data.result;
+		successData.encodedURL = encodeURIComponent(successData.url);
+		successData.encodedText = encodeURIComponent(successData.name + " : " + successData.shortUrl + " :: Converted my old #Spotify playlist to @Rdio with @mixtripapp http://mixtrip.herokuapp.com");
+		$('#success #successNote').html(Mustache.to_html(createdTemplate,data.result));
+		$('#creating').fadeOut();
+		$('#success').fadeIn();
+	});
+
+	socket.on('rdioCreateError', function(data) {
+		$('#error #successNote').html(Mustache.to_html(successTemplate,data.result));
+		$('#creating').fadeOut();
+		$('#success').fadeIn();
+	});
+
+
+	socket.on('generalTrackError', function(data) {
+		var row = $('tr#'+data);
+		try { 
+			var template = $('#errorTpl').html();
+			$(row).html(Mustache.to_html(template,data));
+			$(row).addClass('error').addClass('disabled');
+		} catch(e) {
+			console.error(e);
+			console.log(data);
+		}
+		console.log('generalTrackError: %o' , data);
+		setProgress();
+	});
+
 	$(document).on('click','.disableRow',function(e) {
 		e.preventDefault();
 		console.log($(this).closest('tr'));
@@ -186,13 +207,19 @@ $(document).ready(function() {
 	$('#createPlaylist').click(function (e) {
 		var rdioList = new Array();
 		var trackList = $('#foundTracks tbody tr:not(.disabled)');
-		console.log(trackList);
 		for(var i = 0; i< trackList.length; i++) {
 			var track = trackList[i];
-			console.log(track);
 			rdioList.push($(track).data('rdioKey'));
 		}
 		console.log(rdioList);
+		socket.emit('createPlaylist', { name: playlistName, tracklist: rdioList})
+		$('#sidebar').fadeOut();
+		$('#playlistDisplay').fadeOut();
+		$('#creating').fadeOut();
+	});
+
+	$('#tryagain').click(function(e) {
+		$('#creatPlaylist').click();
 	});
 
 	function setProgress() {
@@ -202,12 +229,13 @@ $(document).ready(function() {
 			$('.progress').removeClass('active');
 			$('.progress .bar').attr('style','width:100%');
 		} else {
-			console.log(trackResponseCounter , trackList.length);
 			var percent = (trackResponseCounter/trackList.length) * 100;
 			$('.progress .bar').attr('style','width:' + percent + '%');
 		}
 		
 	}
+	$('#toggleTwitter').button('toggle');
+	$('#toggleTwitter').data('canTweet', true);
 
 	$('#mixtripAffix').affix();
 });

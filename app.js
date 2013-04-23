@@ -3,7 +3,7 @@
  * Module dependencies.
  */
 
-var express = require('express')
+var express = require('express.io')
   , routes = require('./routes')
   , user = require('./routes/user')
   , http = require('http')
@@ -15,11 +15,8 @@ var express = require('express')
   , clc = require('cli-color');
 
 
-var rdio = new Rdio(["8cqh2xzc5m32u8awqahbkt2p", "7nXS37CH2Y"]);
 
-var app = express()
-    , server = http.createServer(app)
-    , io = io.listen(server);
+var app = express().http().io();
 
 
 var url = null;
@@ -35,10 +32,10 @@ if (url.auth)
 
 
 
-io.configure(function () { 
-  io.set("transports", ["xhr-polling"]); 
-  io.set("polling duration", 10); 
-  io.set('log level', 1);
+app.io.configure(function () { 
+  app.io.set("transports", ["xhr-polling"]); 
+  app.io.set("polling duration", 10); 
+  app.io.set('log level', 1);
 });
 
 
@@ -95,7 +92,6 @@ app.get("/", function (req, res) {
         if (accessToken && accessTokenSecret) {
             var rdio = new Rdio([cred.RDIO_CONSUMER_KEY, cred.RDIO_CONSUMER_SECRET],
                                 [accessToken, accessTokenSecret]);
-
             res.render('mixtrip', { title: 'mixtrip'});
         } else {
             console.log(clc.redBright('Failed to use sessions'));
@@ -152,6 +148,7 @@ app.get("/callback", function (req, res) {
             req.session.ats = rdio.token[1];
             req.session.rt = null;
             req.session.rts = null;
+            req.session.rdio = rdio;
             // Go to the home page.
             res.redirect("/");
         });
@@ -163,39 +160,118 @@ app.get("/callback", function (req, res) {
 
 var activeClients = 0;
 
-io.sockets.on('connection', function (socket) {
+app.io.route('connection', function (req) {
+     activeClients++;
+    app.io.broadcast('clientConnected', { clientCount: activeClients })
+   
+});
 
-    clientConnect(socket);
-    socket.on('disconnect', function() { clientDisconnect(socket); });
-    socket.on('getRdioKeys', function(data) { getRdioKeys(socket,data); });
-    socket.on('getTrackListInfo', function(data) { getTrackListInfo(socket,data); });
-
+app.io.route('disconnect', function(req) { 
+    activeClients--;
+    app.io.broadcast('clientDisconnected', { clientCount: activeClients });
 });
 
 
+app.io.route('getTrackListInfo', function(req) { 
+    var currentTrack = -1;
+    var keysToGet = new Array();
+    var trackTimer = null;
+    var localFiles = new Array();
+    var getNextTrackInfo = function() {
+        if (currentTrack++ < keysToGet.length - 1) {
+            var track = keysToGet[currentTrack];
+       
+            var url='http://ws.spotify.com/lookup/1/.json?uri=spotify:track:' + track;
 
-function clientConnect(socket) {
-    activeClients++;
-    socket.broadcast.emit('clientConnected', { clientCount: activeClients })
-    socket.emit('clientConnected', { clientCount: activeClients });
+            var spotifyreq = http.get(url, function(res) {
+                var data = "";
+                res.on('data', function (chunk) {
+                    data += chunk;
+                });
+                res.on('end', function() {
+                    try { 
+                        
+                        var trackInfo = {
+                            id: track
+                            , spotify: JSON.parse(data)
+                            , rdio: {}
+                        };
+                        req.io.emit('spotifyInfoReceived', trackInfo);
+                        getRdioInfo(req,trackInfo);    
+                    } catch (e) {
+                        console.log(clc.redBright("error parsing json:  " + url + " : "  + e));
+                        req.io.emit('generalTrackError', track);
+                        console.log(clc.blueBright("JSON: " + data));
+                    }
+                });
+            });
 
-}
+            spotifyreq.on('error', function(e) {
+                console.log(clc.redBright('problem with request: ' + e.message));
+            });
+            
+        } else {
+            clearInterval(trackTimer);
+        }
+    };
 
-function clientDisconnect(socket) {
-    activeClients--;
-    socket.broadcast.emit('clientDisconnected', { clientCount: activeClients });
-}
+    req.data.forEach(function(spotifyKey, index, array) {
+        redis.get(spotifyKey, function(err,value) {
+            if (!err) {
+                if (value == null) {
+                    if (spotifyKey.toString().match(/-/)) {
+                        console.log('found local file: ' + spotifyKey);
+                        searchRdioForLocal(req, spotifyKey);
+                    } else {
+                        keysToGet.push(spotifyKey);
+                    }
+                } else {
+                    req.io.emit('allDataAcquired',JSON.parse(value));
+                }
+            } else {
+                console.log('error: ' + err);
+            }
 
-function getRdioInfo(socket,data) {
+            if (index == array.length -1)
+            {
+                trackTimer = setInterval(getNextTrackInfo,1000);
+            }
+        });
+    });
+});
+
+app.io.route('createPlaylist', function(req) {     
+    var rdio = getSessionRdio(req);
+    console.log('tracks: ' + req.data.tracklist.join())
+    console.log('creating playlist: ' + req.data.name);
+    rdio.call("createPlaylist", {name: req.data.name, description: "Created by mixtrip", tracks: req.data.tracklist.join() } , function(err,rdioData) {
+        console.log('playlist response');
+        if (err) {
+            console.log(clc.redBright('error creating playlist: ' + err));
+            req.io.emit('rdioCreateError', { error: err});
+            redis.del(trackID);
+        } else {
+            if (rdioData.status == "ok") {
+                console.log('emitting success');
+                req.io.emit('rdioCreateSuccess', rdioData)
+            }
+        }
+    }); 
+
+});
+
+function getRdioInfo(req,data) { 
+     
     var track = data;
     var spotify = track.spotify;
     var artists = spotify.track.artists;
     var trackID = data.id;
+     var rdio = getSessionRdio(req);
 
     rdio.call("getTracksByISRC", {isrc: spotify.track['external-ids'][0]['id']} , function(err,rdioData) {
         if (err) {
             console.log(clc.redBright('error retreiving ISRC: ' + err));
-            socket.emit('rdioISRCError', {id: trackID});
+            req.io.emit('rdioISRCError', {id: trackID});
             redis.del(trackID);
         } else {
             if (rdioData.status == "ok") {
@@ -206,21 +282,21 @@ function getRdioInfo(socket,data) {
                             if (err) {
                                 console.log(clc.redBright("error re-inserting: " + err));
                             } else {
-                                socket.emit('rdioInfoReceived', track);
+                                req.io.emit('rdioInfoReceived', track);
                             }
                         });
                     } else {
-                        var artist = artists[0].name.replace(/[,\!]/g, "");
-                        var name = spotify.track.name.replace(/[,\!]/g, "");
+                        var artist = artists[0].name.replace(/[,\!\(\)]/g, "");
+                        var name = spotify.track.name.replace(/[,\!\(\)]/g, "");
                         console.log(clc.redBright("NO MATCH FOUND: Searching ") + artist + " : " + name );
                          rdio.call("search", {query: artist + " " + name, types: "Track"} , function(err,rdioData) {
                             if (err) {
                                 console.log(clc.redBright('error searching: ' + err));
-                                socket.emit('rdioSearchError', {id: trackID, error: err});
+                                req.io.emit('rdioSearchError', {id: trackID, error: err});
                                 redis.del(trackID);
                             } else {
                                 if (rdioData.status == "ok") {
-                                    socket.emit('replacementSuggestionsReceived', {spotify: data, searchData: rdioData.result})
+                                    req.io.emit('replacementSuggestionsReceived', {spotify: data, searchData: rdioData.result})
                                 }
                             }
                         });
@@ -235,99 +311,45 @@ function getRdioInfo(socket,data) {
             }
         }
     });
+
 }
 
-
-function searchRdioForLocal(socket,data) {
-    console.log('searching for: ' + data);
+function searchRdioForLocal(req,data) {
+    var rdio = getSessionRdio(req);
     var matches = data.split('___');
-    console.log(clc.blueBright('searching for: ' +  matches));
     var artist = matches[0].replace(/\-/g, ' ');
     var trackName = matches[2].replace(/\-/g, ' ');
     rdio.call("search", {query: artist + " " + trackName, types: "Track"} , function(err,rdioData) {
         if (err) {
             console.log(clc.redBright('error searching: ' + err));
-            socket.emit('rdioSearchError', {id: trackID});
+            req.io.emit('rdioSearchError', {id: trackID});
             redis.del(trackID);
         } else {
             if (rdioData.status == "ok") {
-                socket.emit('searchSuggestionsReceived', {id: data, searchData:rdioData.result})
+                req.io.emit('searchSuggestionsReceived', {id: data, searchData:rdioData.result})
             }
         }
     });
 }
 
 
-function getTrackListInfo(socket,data) {
-    console.log(clc.greenBright(JSON.stringify(data)));
-    var currentTrack = -1;
-    var keysToGet = new Array();
-    var trackTimer = null;
-    var localFiles = new Array();
-    var getNextTrackInfo = function() {
-        if (currentTrack++ < keysToGet.length - 1) {
-            var track = keysToGet[currentTrack];
-            console.log(track);
-       
-            var url='http://ws.spotify.com/lookup/1/.json?uri=spotify:track:' + track;
+function getSessionRdio(req) {
+    var session = req.session;
+     var rdio = null;
+    if (session.hasOwnProperty('at')  && session.hasOwnProperty('ats')) {
+        var accessToken = session.at;
+        var accessTokenSecret = session.ats;
 
-            var req = http.get(url, function(res) {
-                var data = "";
-                res.on('data', function (chunk) {
-                    data += chunk;
-                });
-                res.on('end', function() {
-                    try { 
-                        var trackInfo = {
-                            id: track
-                            , spotify: JSON.parse(data)
-                            , rdio: {}
-                        };
-                        socket.emit('spotifyInfoReceived', trackInfo);
-                        getRdioInfo(socket,trackInfo);    
-                    } catch (e) {
-                        console.log(clc.redBright("error parsing json:  " + url + " : "  + e));
-                        console.log(clc.blueBright("JSON: " + data));
-                    }
-                });
-            });
-
-            req.on('error', function(e) {
-                console.log(clc.redBright('problem with request: ' + e.message));
-            });
-            
-        } else {
-            clearInterval(trackTimer);
+        if (accessToken && accessTokenSecret) {
+            console.log('rdio is go');
+             return new Rdio([cred.RDIO_CONSUMER_KEY, cred.RDIO_CONSUMER_SECRET],
+                                [accessToken, accessTokenSecret]);
         }
-    };
-
-    data.forEach(function(spotifyKey, index, array) {
-        redis.get(spotifyKey, function(err,value) {
-            if (!err) {
-                if (value == null) {
-                    if (spotifyKey.toString().match(/-/)) {
-                        console.log('found local file: ' + spotifyKey);
-                        searchRdioForLocal(socket, spotifyKey);
-                    } else {
-                        keysToGet.push(spotifyKey);
-                    }
-                } else {
-                    socket.emit('allDataAcquired',JSON.parse(value));
-                }
-            } else {
-                console.log('error: ' + err);
-            }
-
-            if (index == array.length -1)
-            {
-                trackTimer = setInterval(getNextTrackInfo,1000);
-            }
-        });
-    });
-
+    } 
+    console.log('rdio is a bust');
+    return null;
 }
 
-
-server.listen(app.get('port'), function(){
+app.listen(app.get('port'), function(){
   console.log('Server listening on port ' + app.get('port'));
 });
