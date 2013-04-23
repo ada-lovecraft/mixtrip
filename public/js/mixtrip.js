@@ -35,25 +35,8 @@ $(document).ready(function() {
 	        	if (playlist.match(/\/playlist\//)){
 	        		socket.emit('getPlaylistInfo',playlist)
 	        	} else {
-		        	var trackLines = playlist.split('\n');
-					trackList = new Array();				
-					trackLines.forEach(function(track) {
-						// \w+$ 
-						// \/local\/
-						if (track.match(/\/local\//)) {
-							//console.log(track);
-							var newTrackName = track.replace('http://open.spotify.com/local/','').replace(/\//g,'___').replace(/[\+%\.]/g,'-');
-							trackList.push(newTrackName);
-						} else {
-							trackList.push(track.match(/\w+$/));
-						}
-					});
-					trackList.forEach(function(track) {
-						//console.log(track);
-						$('#foundTracks tbody').append(Mustache.to_html(blankTrackTemplate,track))
-					});
-					socket.emit('getTrackListInfo',trackList);
-					$(this).attr('disabled','disabled');
+	        		parsePlaylist(playlist);
+	        		socket.emit('getTrackListInfo', tracklist);
 				}
 
 			} else {
@@ -61,8 +44,43 @@ $(document).ready(function() {
 			}
 
 	    return false;
+	}).on('click', function(e) {
+		$(this).addClass('pasteReady');
+		$(this).find('h1').html('Ok. Paste your playlist');
+		$(this).find('p#info').html('or drag a playlist with less than 30 tracks here.');
+		$('#pasteData').focus();
 	});
 
+	$('#pasteData').on('paste', function(e) {
+		var self = this;
+		setTimeout(function() {
+			var playlist = $(self).val();
+			console.log(playlist);
+			if (parsePlaylist(playlist)) {
+				console.log('playlist is good');
+				$('#playlistTarget').addClass('pasteComplete');
+				$('#playlistTarget').addClass('dragComplete').fadeOut(function() {
+		        	$('#playlistDisplay').fadeIn();
+		        	$('#sidebar').fadeIn();
+				});
+				socket.emit('getTrackListInfo', trackList);
+			}
+			else {
+				cleanPlaylistTarget();
+				$('#playlistTarget').addClass('parseError');
+				$('#playlistTarget h1').html('Something went wrong');
+				$('#playlistTarget p#info').html("You pasted something that wasn't a playlist");
+				$('#playlistTarget h2#statusText').html("Try again");
+
+			}
+		}, 100);
+
+	}).on('blur', function(e) {
+		cleanPlaylistTarget();
+		$('#playlistTarget h1').html('Drag your play list here');
+		$('#playlistTarget p#info').html("or, if you have more than 30 tracks in your playlist, highlight all the tracks, hit the copy key combo, then click here and paste it.");
+		$('#playlistTarget h2#statusText').html("");
+	});
 
 	$('#toggleErrors').click(function(e) {
 		e.preventDefault();
@@ -228,6 +246,35 @@ $(document).ready(function() {
 		$('#creatPlaylist').click();
 	});
 
+
+	function parsePlaylist(playlist) {
+		var trackLines = playlist.replace(/ /g,'\n').split('\n');
+		trackList = new Array();				
+		trackLines.forEach(function(track) {
+			if (track.match(/http:\/\/open.spotify.com\//)) {
+				if (track.match(/\/local\//)) {
+					//console.log(track);
+					var newTrackName = track.replace('http://open.spotify.com/local/','').replace(/\//g,'___').replace(/[\+%\.]/g,'-');
+					trackList.push(newTrackName);
+				} else {
+					trackList.push(track.match(/\w+$/));
+				}
+			} else {
+				console.log('track not correct: ' + track);
+			}
+		});
+		console.log('trackLength : ' + trackList.length);
+		if (trackList.length > 0) {
+			trackList.forEach(function(track) {
+				$('#foundTracks tbody').append(Mustache.to_html(blankTrackTemplate,track))
+			});
+			return true;
+		} else {
+			return false;
+		}
+		
+	}
+
 	function setProgress() {
 		trackResponseCounter++
 		if( trackResponseCounter == trackList.length) {
@@ -240,11 +287,21 @@ $(document).ready(function() {
 		}
 		
 	}
+
+	function cleanPlaylistTarget() {
+		$('#playlistTarget').attr('class', 'span10 hero-unit');
+	};
+
+
 	$('#toggleTwitter').button('toggle');
 	$('#toggleTwitter').data('canTweet', true);
 
 	$('#mixtripAffix').affix();
+
+
+
 });
+
 
 
 

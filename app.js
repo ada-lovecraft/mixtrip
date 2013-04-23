@@ -237,6 +237,7 @@ function getTrackListInfo(req) {
     };
 
     req.data.forEach(function(spotifyKey, index, array) {
+        console.log(spotifyKey);
         redis.get(spotifyKey, function(err,value) {
             if (!err) {
                 if (value == null) {

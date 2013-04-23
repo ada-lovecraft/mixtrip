@@ -6,7 +6,9 @@ block content
 	div#mixtrip
 		div#playlistTarget.span10.hero-unit
 			h1 Drag your play list here.
-			p Just highlight everything in Spotify and drag it on here.
+			p#info Or, if you have more than 30 tracks in your playlist, highlight all the tracks, hit the copy key combo, then click here and paste it.
+			h2#statusText
+		input#pasteData(type="text")
 	div.row
 		div.hide.span4#sidebar
 			div.span4.well#mixtripAffix

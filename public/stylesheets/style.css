@@ -11,7 +11,7 @@ a {
 
 div#playlistTarget {
 	border-radius: 100px;
-
+	cursor: pointer;
 }
 
 .activeDrag {
@@ -20,6 +20,18 @@ div#playlistTarget {
 
 .dragComplete{
 	background-color: #9669FE;
+}
+
+.parseError {
+	background-color: #fe6990;	
+}
+
+.pasteComplete {
+	background-color: #adfe69;
+}
+
+.pasteReady {
+	background-color: #69d0fe;
 }
 
 .select {
@@ -34,3 +46,10 @@ tr.disabled td{
 #mixtripAffix button {
 	width: 100%;
 }
+
+#pasteData {
+	position: absolute;
+	left: -100px;
+	top: -100px;
+}
+
