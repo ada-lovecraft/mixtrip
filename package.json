@@ -12,6 +12,7 @@
     "socket.io":"*",
     "cli-color":"*",
     "express.io":"*",
-    "yql":"*"
+    "yql":"*",
+    "oauth": "*"
   }
 }

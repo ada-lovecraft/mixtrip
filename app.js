@@ -10,14 +10,28 @@ var express = require('express.io')
   , path = require('path')
   , Rdio = require("./rdio")
   , cred = require("./rdio_consumer_credentials")
+  , twitterKeys = require("./twitter_consumer_credentials")
   , EventEmitter = require('events').EventEmitter
   , io = require('socket.io')
   , clc = require('cli-color')
-  , yql = require('yql');
-
+  , yql = require('yql')
+  , util = require('util')
+  , OAuth = require('oauth').OAuth
+  , sys = require('sys');
 
 
 var app = express().http().io();
+
+
+var tweeter = new OAuth(
+  "https://api.twitter.com/oauth/request_token",
+  "https://api.twitter.com/oauth/access_token",
+  twitterKeys.consumerKey,
+  twitterKeys.consumerSecret,
+  "1.0",
+  null,
+  "HMAC-SHA1"
+ );
 
 
 var url = null;
@@ -53,9 +67,11 @@ app.configure(function() {
         secret: 'seeeecreeeeet'
     }));
     app.use(app.router);
-    app.use(express.static(path.join(__dirname, 'public')));
-
+    app.use(express.static(path.join(__dirname, 'public')))
 });
+
+
+
 
 app.configure( 'development', function() {
     app.use(function(req,res,next) {
@@ -159,6 +175,10 @@ app.get("/callback", function (req, res) {
     }
 });
 
+
+
+
+
 var activeClients = 0;
 
 app.io.route('connection', function (req) {
@@ -193,6 +213,28 @@ app.io.route('getPlaylistInfo', function(req) {
 app.io.route('getTrackListInfo', function(req) { 
     getTrackListInfo(req);
 });
+
+
+app.io.route('createPlaylist', function(req) {     
+    var rdio = getSessionRdio(req);
+    console.log('tracks: ' + req.data.tracklist.join())
+    console.log('creating playlist: ' + req.data.name);
+    var playlistName = req.data.name.replace(/[^a-zA-Z0-9_\- ]/g,'');
+    rdio.call("createPlaylist", {name: playlistName, description: "Created by mixtrip", tracks: req.data.tracklist.join() } , function(err,rdioData) {
+        console.log('playlist response');
+        if (err) {
+            console.log(clc.redBright('error creating playlist: ' + err));
+            req.io.emit('rdioCreateError', { error: err});
+        } else {
+            if (rdioData.status == "ok") {
+                console.log('emitting success');
+                req.io.emit('rdioCreateSuccess', rdioData)
+            }
+        }
+    }); 
+
+});
+
 function getTrackListInfo(req) {
     var currentTrack = -1;
     var keysToGet = new Array();
@@ -261,26 +303,6 @@ function getTrackListInfo(req) {
         });
     });
 }
-
-app.io.route('createPlaylist', function(req) {     
-    var rdio = getSessionRdio(req);
-    console.log('tracks: ' + req.data.tracklist.join())
-    console.log('creating playlist: ' + req.data.name);
-    var playlistName = req.data.name.replace(/[^a-zA-Z0-9_\- ]/g,'');
-    rdio.call("createPlaylist", {name: playlistName, description: "Created by mixtrip", tracks: req.data.tracklist.join() } , function(err,rdioData) {
-        console.log('playlist response');
-        if (err) {
-            console.log(clc.redBright('error creating playlist: ' + err));
-            req.io.emit('rdioCreateError', { error: err});
-        } else {
-            if (rdioData.status == "ok") {
-                console.log('emitting success');
-                req.io.emit('rdioCreateSuccess', rdioData)
-            }
-        }
-    }); 
-
-});
 
 function getRdioInfo(req,data) { 
      
@@ -372,8 +394,23 @@ function getSessionRdio(req) {
     return null;
 }
 
+function sendTweet(status) {
+    tweeter.post("http://api.twitter.com/1/statuses/update.json",
+               twitterKeys.token, twitterKeys.secret, { status: 'Test Tweet from mixtrip' }, "application/json",
+       function (error, data, response2) {
+           if(error){
+               console.log('Error: Something is wrong.\n'+JSON.stringify(error)+'\n');
+           }else{
+               console.log('Twitter status updated.\n');
+               console.log(response2+'\n');
+           }
+    });
+}
+
 
 
 app.listen(app.get('port'), function(){
   console.log('Server listening on port ' + app.get('port'));
 });
+
+
