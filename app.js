@@ -16,8 +16,7 @@ var express = require('express.io')
   , clc = require('cli-color')
   , yql = require('yql')
   , util = require('util')
-  , OAuth = require('oauth').OAuth
-  , sys = require('sys');
+  , OAuth = require('oauth').OAuth;
 
 
 var app = express().http().io();
@@ -206,10 +205,13 @@ app.io.route('getPlaylistInfo', function(req) {
             var playlistName = header.h1;
             var player = response.query.results.results.div[0].div[1].ul.li;
             var trackList = new Array();
-            console.log(player);
-            player.forEach(function(track) {
-                trackList.push(track.a[1].href.replace(/\/track\//,''));
-            });
+            console.log('player: ' + JSON.stringify(player));
+            if (typeof player == 'array')
+                player.forEach(function(track) {
+                    trackList.push(track.a[1].href.replace(/\/track\//,''));
+                });
+            else 
+                trackList.push(player.a[1].href.replace(/\/track\//,''));
             req.io.emit('playlistRetrieved', { trackList: trackList, playlistName: playlistName});
             req.data = trackList;
             getTrackListInfo(req);
