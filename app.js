@@ -206,15 +206,17 @@ app.io.route('getPlaylistInfo', function(req) {
             var player = response.query.results.results.div[0].div[1].ul.li;
             var trackList = new Array();
             console.log('player: ' + JSON.stringify(player));
-            if (typeof player == 'array')
+            console.log(typeof player);
+            try {
                 player.forEach(function(track) {
-                    trackList.push(track.a[1].href.replace(/\/track\//,''));
-                });
-            else 
-                trackList.push(player.a[1].href.replace(/\/track\//,''));
-            req.io.emit('playlistRetrieved', { trackList: trackList, playlistName: playlistName});
-            req.data = trackList;
-            getTrackListInfo(req);
+                        trackList.push(track.a[1].href.replace(/\/track\//,''));
+                    });
+                req.io.emit('playlistRetrieved', { trackList: trackList, playlistName: playlistName});
+                req.data = trackList;
+                getTrackListInfo(req);
+            } catch(e) {
+                console.log(e);
+            }
     });
 
 });
