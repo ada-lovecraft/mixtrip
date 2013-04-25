@@ -33,7 +33,7 @@ var tweeter = new OAuth(
   "HMAC-SHA1"
  );
 
-
+var lastSongAnnouncement = 1;
 var url = null;
 if (process.env.OPENREDIS_URL)
     url   = require("url").parse(process.env.OPENREDIS_URL);
@@ -82,6 +82,12 @@ app.configure( 'development', function() {
 
 redis.on("error", function (err) {
     console.log("error event - " + redis.host + ":" + redis.port + " - " + err);
+});
+
+redis.on('ready', function() {
+    redis.dbsize(function (err, reply) {
+        lastSongAnnouncement = reply;
+    });
 });
 /*
 levelup('db/rdio', function (err,db) {
@@ -195,6 +201,7 @@ app.io.route('disconnect', function(req) {
 app.io.route('getPlaylistInfo', function(req) {
     var playlistURL = req.data;
     new yql.exec('select * from data.html.cssselect where url="' + playlistURL + '" and css="div.two-thirds"', function(response) {
+            console.log(response);
             var header = response.query.results.results.div[0].div[0];
             var playlistName = header.h1;
             var player = response.query.results.results.div[0].div[1].ul.li;
@@ -228,7 +235,20 @@ app.io.route('createPlaylist', function(req) {
         } else {
             if (rdioData.status == "ok") {
                 console.log('emitting success');
-                req.io.emit('rdioCreateSuccess', rdioData)
+                req.io.emit('rdioCreateSuccess', rdioData);
+                var count="";
+                if (req.session.newSongs > 0) 
+                    count = " and added " + req.session.newSongs + " new songs to the index.";
+                var status = "Created Playlist: " + playlistName + " ( " + rdioData.result.shortUrl + " )" + count;
+                sendTweet(status);
+
+                redis.dbsize(function (err, reply) {
+                    if ((reply - lastSongAnnouncement) > (reply / 10)) {
+                        status = 'Now indexing ' + reply + ' songs.';
+                        sendTweet(status);
+                    }
+                });
+
             }
         }
     }); 
@@ -240,6 +260,7 @@ function getTrackListInfo(req) {
     var keysToGet = new Array();
     var trackTimer = null;
     var localFiles = new Array();
+    req.session.newSongs = 0;
     var getNextTrackInfo = function() {
         if (currentTrack++ < keysToGet.length - 1) {
             var track = keysToGet[currentTrack];
@@ -310,8 +331,7 @@ function getRdioInfo(req,data) {
     var spotify = track.spotify;
     var artists = spotify.track.artists;
     var trackID = data.id;
-     var rdio = getSessionRdio(req);
-
+    var rdio = getSessionRdio(req);
     rdio.call("getTracksByISRC", {isrc: spotify.track['external-ids'][0]['id']} , function(err,rdioData) {
         if (err) {
             console.log(clc.redBright('error retreiving ISRC: ' + err));
@@ -327,6 +347,7 @@ function getRdioInfo(req,data) {
                                 console.log(clc.redBright("error re-inserting: " + err));
                             } else {
                                 req.io.emit('rdioInfoReceived', track);
+                                req.session.newSongs++;
                             }
                         });
                     } else {
@@ -396,7 +417,7 @@ function getSessionRdio(req) {
 
 function sendTweet(status) {
     tweeter.post("http://api.twitter.com/1/statuses/update.json",
-               twitterKeys.token, twitterKeys.secret, { status: 'Test Tweet from mixtrip' }, "application/json",
+               twitterKeys.token, twitterKeys.secret, { status: status }, "application/json",
        function (error, data, response2) {
            if(error){
                console.log('Error: Something is wrong.\n'+JSON.stringify(error)+'\n');
