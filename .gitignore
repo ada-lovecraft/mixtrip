@@ -16,3 +16,5 @@ results
 npm-debug.log
 node_modules
 db/*
+twitter_consumer_credentials.js
+rdio_consumer_credentials.js
